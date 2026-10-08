@@ -1,8 +1,10 @@
 // base.h — общие подключения и мелкие хелперы (без GDI+)
 #pragma once
 #define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
+// WIN32_LEAN_AND_MEAN не используем: он вырезает ole2.h, а GDI+ нужны IStream, PROPID, byte, IUnknown, HDC...
 #include <windows.h>
+#include <objbase.h>   // CoInitializeEx, COINIT_*
+#include <ole2.h>      // IStream, IUnknown (требуются для <gdiplus.h>)
 #include <shellapi.h>
 #include <algorithm>
 #include <atomic>
