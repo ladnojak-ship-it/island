@@ -16,7 +16,7 @@ static Bitmap* art = nullptr; static std::wstring lastTitle, lastArtist;
 static int lastSeq = 0;
 static const wchar_t* LC[4] = { L"explorer.exe", L"wt.exe", L"calc.exe", L"ms-screenclip:" };
 
-void IslandInit(HWND h) { hw = h; spW.snap(150); spH.snap(34); hudSp.snap(1); volV = VolGet(); volM = MuteGet(); }
+void IslandInit(HWND h) { hw = h; spW.snap(150); spH.snap(36); hudSp.snap(1); volV = VolGet(); volM = MuteGet(); }
 void IslandMenuOpen(bool o) { menuOpen = o; }
 
 static void CursorXY(float& x, float& y) { POINT p; GetCursorPos(&p); x = (p.x - g_canvasLeft) / g_S; y = p.y / g_S; }
@@ -32,15 +32,15 @@ void IslandMouseDown() {
     if (!expanded || spW.x < 400) return;
     float x, y; CursorXY(x, y); Lay L = LayoutFor(spW.x);
     auto d = [&](PointF p, float r) { return std::hypot(x - p.X, y - p.Y) < r; };
-    if (d(L.prev, 24)) { MediaSend(2); V.press[0] = 1; }
-    else if (d(L.next, 24)) { MediaSend(3); V.press[2] = 1; }
-    else if (d(L.play, 24)) { MediaSend(1); V.press[1] = 1; }
+    if (d(L.prev, 25)) { MediaSend(2); V.press[0] = 1; }
+    else if (d(L.next, 25)) { MediaSend(3); V.press[2] = 1; }
+    else if (d(L.play, 27)) { MediaSend(1); V.press[1] = 1; }
     else if (x >= L.prog.X - 6 && x <= L.prog.X + L.prog.Width + 6 && fabsf(y - (L.prog.Y + 2)) < 10) {
         Media m = MediaGet(); if (m.dur > 0) MediaSend(4, cl((x - L.prog.X) / L.prog.Width, 0, 1) * m.dur);
     }
-    else if (d(PointF(L.px + 30, L.vb.Y + 2.5f), 14)) { volM = !volM; MuteSet(volM); }
+    else if (d(L.mute, 16)) { volM = !volM; MuteSet(volM); }
     else if (fabsf(y - (L.vb.Y + 2.5f)) < 12 && x >= L.vb.X - 8 && x <= L.vb.X + L.vb.Width + 8) { drag = true; SetCapture(hw); SetVolume((x - L.vb.X) / L.vb.Width); }
-    else if (s_launch) for (int i = 0; i < 5; i++) if (d(L.launch[i], 18)) {
+    else if (s_launch) for (int i = 0; i < 5; i++) if (d(L.launch[i], 20)) {
         V.press[3 + i] = 1;
         if (i == 4) OpenSettings();
         else if ((INT_PTR)ShellExecuteW(0, L"open", LC[i], 0, 0, SW_SHOW) <= 32 && i == 1) ShellExecuteW(0, L"open", L"cmd.exe", 0, 0, SW_SHOW);
@@ -55,6 +55,7 @@ void IslandWheel(int delta) { SetVolume(volV + (delta / 120) * 0.02f); }
 int IslandTick() {
     static LARGE_INTEGER fq, last; static bool init = false, firstDraw = true; static ULONGLONG t1 = 0, t2 = 0, lastDraw = 0;
     LARGE_INTEGER n; QueryPerformanceCounter(&n);
+    if (g_resizeReq.exchange(false)) { RenderResize(); firstDraw = true; }
     if (!init) { QueryPerformanceFrequency(&fq); last = n; init = true; }
     float dt = cl((float)(n.QuadPart - last.QuadPart) / fq.QuadPart, 0.001f, 0.05f); last = n;
     ULONGLONG now = GetTickCount64(); bool am = false, sec = false;
@@ -86,9 +87,9 @@ int IslandTick() {
     if (V.trackAnim < 1) { V.trackAnim = min(1.f, V.trackAnim + dt / .55f); am = true; }
 
     // цели размеров + разные «характеры» пружин: раскрытие — с отскоком, сворачивание — плотнее, всплывашка — «поп»
-    if (expanded) { spW.t = 430; spH.t = s_launch ? 262.f : 222.f; spW.k = 300; spW.c = 19; }
-    else if (hud) { spW.t = hud == 3 ? 330.f : hud == 4 ? 350.f : 300.f; spH.t = 46; spW.k = 380; spW.c = 17; }
-    else { spW.t = m.has ? 220.f : 150.f; spH.t = m.has ? 36.f : 34.f; spW.k = 360; spW.c = 30; }
+    if (expanded) { spW.t = 430; spH.t = s_launch ? 276.f : 240.f; spW.k = 300; spW.c = 19; }
+    else if (hud) { spW.t = hud == 3 ? 340.f : hud == 4 ? 360.f : 310.f; spH.t = 50; spW.k = 380; spW.c = 17; }
+    else { spW.t = m.has ? 230.f : 158.f; spH.t = m.has ? 40.f : 38.f; spW.k = 360; spW.c = 30; }
     spH.k = spW.k * .85f; spH.c = spW.c * .95f;           // высота чуть запаздывает — «желейный» эффект
     spW.step(dt); spH.step(dt); hudSp.step(dt);
     bool moving = spW.moving() || spH.moving();
@@ -100,8 +101,8 @@ int IslandTick() {
     float hovT[10] = { 0 };
     if (expanded && fade > .6f) {
         Lay L = LayoutFor(spW.x); auto d = [&](PointF p, float r) { return std::hypot(mx - p.X, my - p.Y) < r; };
-        hovT[0] = d(L.prev, 24); hovT[1] = d(L.play, 24); hovT[2] = d(L.next, 24);
-        if (s_launch) for (int i = 0; i < 5; i++) hovT[3 + i] = d(L.launch[i], 18);
+        hovT[0] = d(L.prev, 25); hovT[1] = d(L.play, 27); hovT[2] = d(L.next, 25);
+        if (s_launch) for (int i = 0; i < 5; i++) hovT[3 + i] = d(L.launch[i], 20);
         hovT[8] = (mx >= L.prog.X - 6 && mx <= L.prog.X + L.prog.Width + 6 && fabsf(my - (L.prog.Y + 2)) < 12) ? 1.f : 0.f;
         hovT[9] = (drag || (fabsf(my - (L.vb.Y + 2.5f)) < 12 && mx >= L.vb.X - 8 && mx <= L.vb.X + L.vb.Width + 8)) ? 1.f : 0.f;
     }

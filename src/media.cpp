@@ -27,17 +27,17 @@ bool MediaTakeArt(Bitmap*& art) {
 }
 static void pushArt(Bitmap* nb) { std::lock_guard<std::mutex> lk(mx); delete artPend; artPend = nb; artDirty = true; }
 
-static Bitmap* mkArt(std::vector<BYTE>& v) {   // обложка -> квадрат 128x128
+static Bitmap* mkArt(std::vector<BYTE>& v) {   // обложка -> квадрат 256x256
     if (v.empty()) return nullptr;
     HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, v.size()); if (!hg) return nullptr;
     void* p = GlobalLock(hg); memcpy(p, v.data(), v.size()); GlobalUnlock(hg);
     IStream* st = nullptr; if (FAILED(CreateStreamOnHGlobal(hg, TRUE, &st))) { GlobalFree(hg); return nullptr; }
     Bitmap* src = Bitmap::FromStream(st); Bitmap* out = nullptr;
     if (src && src->GetLastStatus() == Ok) {
-        out = new Bitmap(128, 128, PixelFormat32bppPARGB); Graphics gg(out);
-        gg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        out = new Bitmap(256, 256, PixelFormat32bppPARGB); Graphics gg(out);
+        gg.SetInterpolationMode(InterpolationModeHighQualityBicubic); gg.SetPixelOffsetMode(PixelOffsetModeHalf);
         UINT w = src->GetWidth(), h = src->GetHeight(), s = min(w, h);
-        gg.DrawImage(src, RectF(0, 0, 128, 128), (REAL)((w - s) / 2), (REAL)((h - s) / 2), (REAL)s, (REAL)s, UnitPixel);
+        gg.DrawImage(src, RectF(0, 0, 256, 256), (REAL)((w - s) / 2), (REAL)((h - s) / 2), (REAL)s, (REAL)s, UnitPixel);
     }
     delete src; st->Release(); return out;
 }

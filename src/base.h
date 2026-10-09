@@ -18,7 +18,8 @@
 #include <vector>
 using std::min; using std::max;
 
-inline constexpr int CW = 440, CH = 300;      // размер холста острова (логические px)
+inline constexpr int CW = 440, CH = 316;      // размер холста острова (логические px)
 extern std::atomic<bool> g_run;               // false -> потоки завершаются
-extern float g_S;                             // масштаб DPI
+extern float g_S;                             // масштаб острова = DPI * настройка «размер»
+extern float g_dpi;                           // системный DPI / 96
 inline float cl(float v, float a, float b) { return v < a ? a : v > b ? b : v; }

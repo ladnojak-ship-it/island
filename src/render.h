@@ -17,8 +17,10 @@ struct View {
     float playAnim = 0, eqAmp = 0, trackAnim = 1, glow = 0;
     double now = 0;                   // секунды
 };
-struct Lay { float px, py, pw; RectF prog, vb; PointF prev, play, next, launch[5]; };
+struct Lay { float px, py, pw; RectF prog, vb; PointF prev, play, next, mute, launch[5]; };
 Lay LayoutFor(float pw);              // координаты элементов раскрытого острова (для кликов)
 extern int g_canvasLeft;              // экранная X-координата левого края холста
 bool RenderInit(HWND hw);
+bool RenderResize();                  // пересоздать холст после смены масштаба (пересчитывает g_S)
+extern std::atomic<bool> g_resizeReq; // true -> в следующем тике пересоздать холст
 void RenderFrame(const View& v);

@@ -10,6 +10,8 @@
 #include "media.h"
 #include "weather.h"
 #include "sysinfo.h"
+#include "fonts.h"
+#include "gfx.h"
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -24,7 +26,17 @@
 
 std::atomic<bool> g_run{ true };
 float g_S = 1;
+float g_dpi = 1;
 static HWND hw;
+
+// иконка в трее: белая «пилюля» с тёмной точкой (рисуем сами, без .ico)
+static HICON MakeTrayIcon() {
+    Bitmap b(32, 32, PixelFormat32bppARGB); HICON h = nullptr;
+    { Graphics g(&b); g.SetSmoothingMode(SmoothingModeHighQuality); g.Clear(Color(0, 0, 0, 0));
+      GraphicsPath p; RR(p, RectF(1, 9, 30, 14), 7); SolidBrush w(Color(255, 245, 245, 245)); g.FillPath(&w, &p);
+      SolidBrush d(Color(255, 30, 30, 34)); g.FillEllipse(&d, 21.f, 12.f, 8.f, 8.f); }
+    b.GetHICON(&h); return h ? h : LoadIcon(0, IDI_APPLICATION);
+}
 
 static int ShowMenu() {
     HMENU mn = CreatePopupMenu(); AppendMenuW(mn, MF_STRING, 1, L"Настройки"); AppendMenuW(mn, MF_STRING, 2, L"Выход");
@@ -65,10 +77,10 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
         return 0;
     }
     HANDLE mtx = CreateMutexW(0, TRUE, L"WinIslandSingleInstance"); if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;
-    SetProcessDPIAware(); g_S = GetDpiForSystem() / 96.f;
+    SetProcessDPIAware(); g_dpi = GetDpiForSystem() / 96.f;
     CoInitializeEx(0, COINIT_APARTMENTTHREADED);
     GdiplusStartupInput gi; ULONG_PTR tok; GdiplusStartup(&tok, &gi, 0);
-    LoadSettings(); ThemeInit(); VolInit(); SysUpdate();
+    LoadSettings(); g_S = g_dpi * s_scale.load() / 100.f; FontsInit(); ThemeInit(); VolInit(); SysUpdate();
 
     WNDCLASSW wc{}; wc.lpfnWndProc = Proc; wc.hInstance = hi; wc.lpszClassName = L"WinIsland"; wc.hCursor = LoadCursor(0, IDC_ARROW);
     RegisterClassW(&wc);
@@ -78,7 +90,7 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     ShowWindow(hw, SW_SHOWNOACTIVATE);
 
     NOTIFYICONDATAW nid{ sizeof nid }; nid.hWnd = hw; nid.uID = 1; nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-    nid.uCallbackMessage = WM_APP + 1; nid.hIcon = LoadIcon(0, IDI_APPLICATION); wcscpy_s(nid.szTip, L"Dynamic Island");
+    nid.uCallbackMessage = WM_APP + 1; nid.hIcon = MakeTrayIcon(); wcscpy_s(nid.szTip, L"Dynamic Island");
     Shell_NotifyIconW(NIM_ADD, &nid);
 
     std::thread tMedia(MediaThread), tWall(WallpaperThread), tWx(WeatherThread);

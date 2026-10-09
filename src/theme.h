@@ -9,3 +9,4 @@ bool ThemeStep(float dt);                 // плавный переход цв�
 Color TC(int idx, float a);               // текущий цвет темы с прозрачностью
 Color Al(Color c, float a);
 void WallpaperThread();
+void ThemePreview(int theme, float out[6][3]);   // палитра темы без переключения (для окна настроек)

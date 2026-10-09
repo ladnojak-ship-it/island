@@ -37,6 +37,10 @@ static void makeMY(float h, bool dark, float o[6][3]) {
     if (dark) { set(0, tone(h, 10, 9)); set(1, tone(h, 6, 90)); set(2, tone(h, 36, 80)); set(3, tone(h, 36, 80)); set(4, tone(h, 36, 20)); set(5, tone(h, 16, 30)); }
     else { set(0, tone(h, 8, 95)); set(1, tone(h, 6, 10)); set(2, tone(h, 36, 40)); set(3, tone(h, 36, 40)); set(4, { 255,255,255 }); set(5, tone(h, 16, 90)); }
 }
+void ThemePreview(int theme, float o[6][3]) {
+    if (theme == 0) { static const float A[6][3] = { {0,0,0},{255,255,255},{255,255,255},{255,255,255},{0,0,0},{44,44,46} }; memcpy(o, A, sizeof A); }
+    else makeMY(g_wpHue, s_dark != 0, o);
+}
 static void ApplyTheme() {
     if (s_theme == 0) { static const float A[6][3] = { {0,0,0},{255,255,255},{255,255,255},{255,255,255},{0,0,0},{44,44,46} }; memcpy(thTgt, A, sizeof A); }
     else makeMY(g_wpHue, s_dark != 0, thTgt);
@@ -93,7 +97,7 @@ void WallpaperThread() {
     std::wstring last; FILETIME lt{};
     while (g_run) {
         std::wstring p;
-        if (s_theme == 1 && wpPath(p)) {      // считаем только если выбран Material You
+        if (wpPath(p)) {                      // считаем всегда: палитра нужна и для превью в настройках
             WIN32_FILE_ATTRIBUTE_DATA d; FILETIME t{}; if (GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &d)) t = d.ftLastWriteTime;
             if (p != last || CompareFileTime(&t, &lt) != 0) { last = p; lt = t; float h; if (wpCalc(p, h)) { g_wpHue = h; g_wpVer++; } }
         }
