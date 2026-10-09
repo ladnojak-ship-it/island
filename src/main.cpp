@@ -1,4 +1,4 @@
-// main.cpp — точка входа: окно, трей, меню, цикл сообщений
+// main.cpp — точка входа: окно, трей, меню, цикл сообщений с синхронизацией по vsync
 #include "base.h"
 #include <timeapi.h>
 #include <dwmapi.h>
@@ -11,6 +11,8 @@
 #include "weather.h"
 #include "sysinfo.h"
 #include "fonts.h"
+#include "audio.h"
+#include "shot.h"
 #include "gfx.h"
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "user32.lib")
@@ -29,6 +31,7 @@ float g_S = 1;
 float g_dpi = 1;
 static HWND hw;
 
+// иконка в трее: белая «пилюля» с тёмной точкой (рисуем сами, без .ico)
 static HICON MakeTrayIcon() {
     Bitmap b(32, 32, PixelFormat32bppARGB); HICON h = nullptr;
     { Graphics g(&b); g.SetSmoothingMode(SmoothingModeHighQuality); g.Clear(Color(0, 0, 0, 0));
@@ -45,22 +48,7 @@ static int ShowMenu() {
 }
 static void MenuAct() { int c = ShowMenu(); if (c == 1) OpenSettings(); else if (c == 2) DestroyWindow(hw); }
 
-// ─── Перехватчик клавиатуры для PrintScreen ──────────────────────────────────
-static HHOOK g_kbHook = nullptr;
-static LRESULT CALLBACK KbProc(int nCode, WPARAM w, LPARAM l) {
-    if (nCode == HC_ACTION) {
-        KBDLLHOOKSTRUCT* k = (KBDLLHOOKSTRUCT*)l;
-        // PrintScreen (VK_SNAPSHOT), Win+PrintScreen, Win+Shift+S → burst
-        bool isSnap = (k->vkCode == VK_SNAPSHOT);
-        bool isWinS  = (k->vkCode == 0x53 && (GetAsyncKeyState(VK_LWIN) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000));
-        if ((w == WM_KEYDOWN || w == WM_SYSKEYDOWN) && (isSnap || isWinS)) {
-            // небольшая задержка чтобы снимок уже был сохранён
-            SetTimer(hw, 42, 300, nullptr);
-        }
-    }
-    return CallNextHookEx(g_kbHook, nCode, w, l);
-}
-
+static int g_clipTries = 0;
 static LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
@@ -69,13 +57,10 @@ static LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_LBUTTONUP: IslandMouseUp(); return 0;
     case WM_MOUSEWHEEL: IslandWheel(GET_WHEEL_DELTA_WPARAM(w)); return 0;
     case WM_RBUTTONUP: MenuAct(); return 0;
-    case WM_TIMER:
-        if (w == 42) { KillTimer(h, 42); IslandScreenshotBurst(); }
-        return 0;
-    case WM_APP + 1:
+    case WM_APP + 1:                       // иконка в трее
         if (LOWORD(l) == WM_RBUTTONUP) MenuAct(); else if (LOWORD(l) == WM_LBUTTONDBLCLK) OpenSettings();
         return 0;
-    case WM_COPYDATA: {
+    case WM_COPYDATA: {                    // island.exe --notify "текст"
         COPYDATASTRUCT* cd = (COPYDATASTRUCT*)l;
         if (cd && cd->dwData == 1 && cd->lpData) {
             std::wstring s((wchar_t*)cd->lpData, cd->cbData / sizeof(wchar_t));
@@ -83,13 +68,19 @@ static LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
             IslandNotify(s);
         }
         return TRUE; }
-    case WM_DESTROY: PostQuitMessage(0); return 0;
+    case WM_CLIPBOARDUPDATE:               // в буфере появилась картинка (скриншот) -> летит в остров
+        if (!ShotGrab(h)) { g_clipTries = 8; SetTimer(h, 7, 50, 0); }
+        return 0;
+    case WM_TIMER:
+        if (w == 7 && (ShotGrab(h) || --g_clipTries <= 0)) KillTimer(h, 7);
+        return 0;
+    case WM_DESTROY: RemoveClipboardFormatListener(h); PostQuitMessage(0); return 0;
     }
     return DefWindowProc(h, m, w, l);
 }
 
 int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
-    if (__argc >= 3 && !wcscmp(__wargv[1], L"--notify")) {
+    if (__argc >= 3 && !wcscmp(__wargv[1], L"--notify")) {     // клиентский режим: отправить уведомление и выйти
         HWND t = FindWindowW(L"WinIsland", 0);
         if (t) { std::wstring s = __wargv[2]; COPYDATASTRUCT cd{ 1, (DWORD)((s.size() + 1) * 2), (void*)s.c_str() }; SendMessage(t, WM_COPYDATA, 0, (LPARAM)&cd); }
         return 0;
@@ -100,24 +91,19 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
     GdiplusStartupInput gi; ULONG_PTR tok; GdiplusStartup(&tok, &gi, 0);
     LoadSettings(); g_S = g_dpi * s_scale.load() / 100.f; FontsInit(); ThemeInit(); VolInit(); SysUpdate();
 
-    // Запуск WASAPI EQ
-    EqCaptureStart();
-
     WNDCLASSW wc{}; wc.lpfnWndProc = Proc; wc.hInstance = hi; wc.lpszClassName = L"WinIsland"; wc.hCursor = LoadCursor(0, IDC_ARROW);
     RegisterClassW(&wc);
     hw = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"WinIsland", L"Island", WS_POPUP, 0, 0, 1, 1, 0, 0, hi, 0);
     if (!RenderInit(hw)) return 1;
+    ShotInit(hi); AddClipboardFormatListener(hw);
     IslandInit(hw);
     ShowWindow(hw, SW_SHOWNOACTIVATE);
-
-    // Глобальный хук клавиатуры для перехвата PrintScreen
-    g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, KbProc, hi, 0);
 
     NOTIFYICONDATAW nid{ sizeof nid }; nid.hWnd = hw; nid.uID = 1; nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_APP + 1; nid.hIcon = MakeTrayIcon(); wcscpy_s(nid.szTip, L"Dynamic Island");
     Shell_NotifyIconW(NIM_ADD, &nid);
 
-    std::thread tMedia(MediaThread), tWall(WallpaperThread), tWx(WeatherThread);
+    std::thread tMedia(MediaThread), tWall(WallpaperThread), tWx(WeatherThread), tAudio(AudioThread);
     timeBeginPeriod(1);
     bool quit = false;
     while (!quit) {
@@ -129,14 +115,11 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int) {
         }
         if (quit) break;
         int wait = IslandTick();
-        if (wait <= 0) { if (FAILED(DwmFlush())) Sleep(8); }
-        else MsgWaitForMultipleObjects(0, 0, FALSE, wait, QS_ALLINPUT);
+        if (wait <= 0) { if (FAILED(DwmFlush())) Sleep(8); }                  // анимация: ждём следующий кадр монитора
+        else MsgWaitForMultipleObjects(0, 0, FALSE, wait, QS_ALLINPUT);      // покой: почти 0% CPU
     }
     timeEndPeriod(1);
-    g_run = false;
-    EqCaptureStop();
-    if (g_kbHook) UnhookWindowsHookEx(g_kbHook);
-    tMedia.join(); tWall.join(); tWx.join();
+    g_run = false; tMedia.join(); tWall.join(); tWx.join(); tAudio.join(); ShotShutdown();
     Shell_NotifyIconW(NIM_DELETE, &nid); ReleaseMutex(mtx);
     return 0;
 }

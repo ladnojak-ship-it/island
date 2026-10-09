@@ -39,11 +39,13 @@ static void makeMY(float h, bool dark, float o[6][3]) {
 }
 void ThemePreview(int theme, float o[6][3]) {
     if (theme == 0) { static const float A[6][3] = { {0,0,0},{255,255,255},{255,255,255},{255,255,255},{0,0,0},{44,44,46} }; memcpy(o, A, sizeof A); }
-    else makeMY(g_wpHue, s_dark != 0, o);
+    else makeMY(s_accent >= 0 ? (float)s_accent : g_wpHue.load(), s_dark != 0, o);
 }
+Color ThemeSeed(float hue) { V3 v = tone(hue, 40, 62); return Color(255, (BYTE)v.r, (BYTE)v.g, (BYTE)v.b); }
+float ThemeWpHue() { return g_wpHue.load(); }
 static void ApplyTheme() {
     if (s_theme == 0) { static const float A[6][3] = { {0,0,0},{255,255,255},{255,255,255},{255,255,255},{0,0,0},{44,44,46} }; memcpy(thTgt, A, sizeof A); }
-    else makeMY(g_wpHue, s_dark != 0, thTgt);
+    else makeMY(s_accent >= 0 ? (float)s_accent : g_wpHue.load(), s_dark != 0, thTgt);
 }
 void ThemeInit() { ApplyTheme(); memcpy(thCur, thTgt, sizeof thCur); }
 bool ThemeStep(float dt) {

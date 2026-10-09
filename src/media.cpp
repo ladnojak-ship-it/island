@@ -68,7 +68,12 @@ void MediaThread() {
                 g_m.has = true; g_m.title = title; g_m.artist = artist;
                 g_m.playing = pb.PlaybackStatus() == MC::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
                 g_m.pos = std::chrono::duration_cast<std::chrono::milliseconds>(tl.Position()).count() / 1000.0;
+                if (g_m.playing) {   // Position обновляется плеером редко -> добавляем время с момента LastUpdatedTime
+                    double age = 0; try { age = std::chrono::duration<double>(winrt::clock::now() - tl.LastUpdatedTime()).count(); } catch (...) {}
+                    if (age > 0 && age < 86400) g_m.pos += age;
+                }
                 g_m.dur = std::chrono::duration_cast<std::chrono::milliseconds>(tl.EndTime()).count() / 1000.0;
+                if (g_m.dur > 0 && g_m.pos > g_m.dur) g_m.pos = g_m.dur;
                 g_m.t = GetTickCount64();
             } else {
                 if (!lastKey.empty()) { lastKey.clear(); pushArt(nullptr); }
